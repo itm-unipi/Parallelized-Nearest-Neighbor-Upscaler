@@ -1,6 +1,8 @@
 #include <vector>
 #include <numeric>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 
 #include "cuda_runtime.h"
 

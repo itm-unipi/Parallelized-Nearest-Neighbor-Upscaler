@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <iostream>
 #include <cstring>
+#include <cmath>
 
 #include "../lib/stb_image.h"
 #include "../lib/stb_image_write.h"
@@ -117,16 +118,14 @@ __global__ void upscaleWithSingleThread(uint8_t* imageToUpscale, uint8_t* upscal
     }
 }
 
-__global__ void upscaleWithTextureObject(cudaTextureObject_t texObj, uint8_t* __restrict__ upscaledImage, uint32_t pixelsHandledByBlock, uint32_t pixelsHandledByThread, uint32_t width, uint32_t height, uint8_t bytePerPixel, uint32_t upscaleFactor)
+__global__ void upscaleWithTextureObject(cudaTextureObject_t texObj, uint8_t* upscaledImage, uint32_t threadsCount, uint32_t pixelsHandledByThread, uint32_t upscaledWidth, uint32_t upscaledSize, uint8_t bytePerPixel, uint32_t upscaleFactor)
 {
-    uint32_t startNewIndex = blockIdx.x * pixelsHandledByBlock + threadIdx.x * pixelsHandledByThread;
-    uint32_t upscaledWidth = width * upscaleFactor;
-    uint32_t upscaledSize = width * height * upscaleFactor * upscaleFactor;
+    uint32_t startNewIndex = blockIdx.x * blockDim.x + threadIdx.x;
 
     // iterate all pixels handled by this thread
     for (uint32_t i = 0; i < pixelsHandledByThread; i++) {
         // compute the coordinates of the pixel
-        uint32_t newIndex = startNewIndex + i;
+        uint32_t newIndex = startNewIndex + (i * threadsCount);
 
         if (newIndex < upscaledSize) {
             uint32_t x = newIndex / upscaledWidth;
@@ -137,8 +136,9 @@ __global__ void upscaleWithTextureObject(cudaTextureObject_t texObj, uint8_t* __
             uint32_t oldY = y / upscaleFactor;
 
             // copy the pixel
-            uchar4  pixelToCopy = tex2D<uchar4>(texObj, oldY, oldX);
-            memcpy(&upscaledImage[newIndex * bytePerPixel], &pixelToCopy, sizeof(uchar4));
+            uchar4 pixelToCopy = tex2D<uchar4>(texObj, oldY, oldX);
+            uchar4* p = (uchar4*)upscaledImage;
+            p[newIndex] = pixelToCopy;
         }
     }
 }
@@ -182,8 +182,12 @@ float gpuUpscaler(size_t originalSize, size_t upscaledSize, uint8_t upscaleFacto
             break;
         case UpscalerType::UpscaleWithTextureObject:
             cudaTextureObject_t texObj = createTextureObject(width, height, bytePerPixel, data);
+            uint32_t threadsCount = ceil(width * height * upscaleFactor * upscaleFactor / settings.pixelsHandledByThread);
+            uint32_t upscaledWidth = width * upscaleFactor;
+            uint32_t upscaledSize = width * height * upscaleFactor * upscaleFactor;
+
             timer.start();
-            upscaleWithTextureObject << <grid, block >> > (texObj, d_out, settings.pixelsHandledByBlock, settings.pixelsHandledByThread, width, height, bytePerPixel, upscaleFactor);
+            upscaleWithTextureObject << <grid, block >> > (texObj, d_out, threadsCount, settings.pixelsHandledByThread, upscaledWidth, upscaledSize, bytePerPixel, upscaleFactor);
             timer.stop();
             break;
     }

@@ -15,12 +15,14 @@ using namespace std;
 void worker(const uint8_t* originalImage, uint8_t* upscaledImage, uint32_t start, uint32_t stop, uint8_t upscaleFactor, size_t width, size_t height, uint32_t bytePerPixel)
 {
     uint32_t upscaledWidth = width * upscaleFactor;
+    uint32_t* p = (uint32_t*)upscaledImage;
+    uint32_t* q = (uint32_t*)originalImage;
 
     // iterate the pixels of the original image assigned to this thread
-    for (size_t oldIndex = start; oldIndex < stop; oldIndex += bytePerPixel) {
+    for (size_t oldIndex = start; oldIndex < stop; oldIndex++) {
         // convert the position in a matrix notation
-        uint32_t i = oldIndex / (width * bytePerPixel);
-        uint32_t j = oldIndex - (i * width * bytePerPixel);
+        uint32_t i = oldIndex / (width);
+        uint32_t j = oldIndex - (i * width);
 
         // compute the position of the first pixel to duplicate in upscaled image
         uint32_t newi = i * upscaleFactor;
@@ -28,14 +30,12 @@ void worker(const uint8_t* originalImage, uint8_t* upscaledImage, uint32_t start
 
         // iterate the pixel to duplicate in upscaled image
         for (int m = newi; m < newi + upscaleFactor; m++) {
-            for (int n = newj; n < newj + upscaleFactor * bytePerPixel; n += bytePerPixel) {
+            for (int n = newj; n < newj + upscaleFactor; n++) {
                 // compute the pixel position in the upscaled image vector
-                uint32_t newIndex = m * upscaledWidth * bytePerPixel + n;
+                uint32_t newIndex = m * upscaledWidth + n;
 
                 // copy all the channels
-                for (int k = 0; k < bytePerPixel; k++) {
-                    upscaledImage[newIndex + k] = originalImage[oldIndex + k];
-                }
+                p[newIndex] = q[oldIndex];
             }
         }
     }
@@ -55,9 +55,9 @@ float cpuMultithreadUpscaler(uint32_t numThread, uint8_t upscaleFactor, uint8_t*
     uint32_t pixelToManage = ceil((double)(sizeOriginalImage / bytePerPixel / numThread));
 
     for (int i = 0; i < numThread; ++i) {
-        uint32_t start = i * pixelToManage * bytePerPixel;
-        uint32_t stop = (start + pixelToManage * bytePerPixel) <= sizeOriginalImage ? (start + pixelToManage * bytePerPixel) : sizeOriginalImage;
-        cout << start << ":" << stop << endl;
+        uint32_t start = i * pixelToManage;
+        uint32_t stop = (start + pixelToManage) <= (sizeOriginalImage / bytePerPixel) ? (start + pixelToManage) : (sizeOriginalImage / bytePerPixel);
+        // cout << start << ":" << stop << endl;
         threads.emplace_back(worker, originalImage, upscaledImage, start, stop, upscaleFactor, width, height, bytePerPixel);
     }
 

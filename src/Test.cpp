@@ -34,6 +34,12 @@ int main(int argc, char* argv[])
         // iterate the required upscaler
         if (!strcmp(argv[4], "cpu")) {
 
+            // check if image size is customized 
+            if (argc == 9) {
+                width = atoi(argv[7]);
+                height = atoi(argv[8]);
+            }
+
             uint32_t numThreads = atoi(argv[5]);
             uint32_t numRepetitions = atoi(argv[6]);
             result = to_string(upscaleFactor) + ";" + to_string(width) + ";" + to_string(height) + ";" + to_string(numThreads);
